@@ -29,6 +29,26 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.5, 0);
 controls.enableDamping = true;
 controls.maxDistance = 40;
+// Middle-drag pans like right-drag (zoom stays on the wheel).
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.PAN,
+};
+
+const legend = document.createElement('div');
+legend.style.cssText = [
+  'position:fixed', 'top:12px', 'right:12px', 'padding:8px 12px',
+  'background:rgba(20, 26, 34, 0.72)', 'color:#e8edf4',
+  'font:12px/1.7 system-ui, sans-serif', 'border-radius:6px',
+  'pointer-events:none', 'white-space:pre',
+].join(';');
+legend.textContent = [
+  'Left drag: orbit',
+  'Right / middle drag: pan',
+  'Scroll: zoom',
+].join('\n');
+document.body.appendChild(legend);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
