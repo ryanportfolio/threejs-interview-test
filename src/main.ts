@@ -230,7 +230,15 @@ let yawLatchDir = 0; // -1 | 0 | 1; latched turn direction near the 180 deg seam
 let lastDesiredYaw = 0;
 
 // Verification instrumentation (read from the console/devtools; renders nothing).
-export const turretStats = { maxYawRate: 0, maxPitchRate: 0, saturatedFrames: 0 };
+export const turretStats = {
+  maxYawRate: 0,
+  maxPitchRate: 0,
+  saturatedFrames: 0,
+  aimErrorDeg: 0, // current angle between barrel aim and true drone bearing
+  maxAimErrorDeg: 0, // peak lag over the run
+};
+const aimDir = new THREE.Vector3();
+const headWorld = new THREE.Vector3();
 declare global {
   interface Window {
     turretStats: typeof turretStats;
@@ -289,6 +297,13 @@ function updateTurret(dt: number): void {
 
   yawBase.rotation.y = yawAngle;
   head.rotation.x = -pitchAngle; // rotating -X raises the +Z barrel
+
+  head.getWorldDirection(aimDir);
+  head.getWorldPosition(headWorld);
+  turretStats.aimErrorDeg = THREE.MathUtils.radToDeg(
+    aimDir.angleTo(targetWorld.sub(headWorld)),
+  );
+  turretStats.maxAimErrorDeg = Math.max(turretStats.maxAimErrorDeg, turretStats.aimErrorDeg);
 }
 
 // ---------------------------------------------------------------------------
