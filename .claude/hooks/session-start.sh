@@ -62,10 +62,10 @@ UNSLOP
 # specific skills are not listed. Claude discovers those from the
 # available-skills list.
 print_skill_reminders() {
-  cat >&2 <<'SKILLS'
+  cat <<'SKILLS'
 [SessionStart] Universal skills. Invoke proactively when the trigger fires:
 SKILLS
-  cat >&2 <<'SKILLS'
+  cat <<'SKILLS'
   - recall                        → BEFORE work in unfamiliar areas; /recall save <text> after gotchas
   - brainstorming                 → BEFORE designing new features or behavior changes
   - impartial-review              → AFTER substantive changes, before merging
