@@ -48,3 +48,6 @@ build/
 Thumbs.db
 .DS_Store
 debug.log
+
+# lab (scratch tuning page, never ship)
+/lab.html

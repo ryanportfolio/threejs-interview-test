@@ -6,11 +6,11 @@ Running decision log for the Vakaros three.js exercise. Newest notes appended pe
 
 - [x] **S0 Adopt repo.** Private mirror `ryanportfolio/threejs-interview-test` of `vakaros/threejs-interview-test`, upstream history preserved, harness overlay committed as `[ai]`.
 - [x] **S1 Baseline.** `npm install` clean (0 vulnerabilities), `npm run build` passes, dev server renders the starter cube, browser console clean (0 errors / 0 warnings).
-- [ ] **S2 Plan.** /dare pass over the requirements before writing scene code.
-- [ ] **S3 Scene statics.** Rotating circular platform, lights, orbit camera.
-- [ ] **S4 Drone path.** Smooth closed loop, above and around the platform, fast enough to outrun the turret cap at some point.
-- [ ] **S5 Turret.** Two-part yaw base + pitch head on the platform edge; world-space tracking that stays correct while the parent platform rotates.
-- [ ] **S6 Constraints.** Pitch floor at horizontal, 90 deg/s slew cap, lag-and-catch-up with no snap or jitter (watch the yaw wrap-around case).
+- [x] **S2 Plan.** /dare pass over the requirements before writing scene code.
+- [x] **S3 Scene statics.** Rotating circular platform, lights, orbit camera.
+- [x] **S4 Drone path.** Smooth closed loop, above and around the platform, fast enough to outrun the turret cap at some point.
+- [x] **S5 Turret.** Two-part yaw base + pitch head on the platform edge; world-space tracking that stays correct while the parent platform rotates.
+- [x] **S6 Constraints.** Pitch floor at horizontal, 90 deg/s slew cap, lag-and-catch-up with no snap or jitter (watch the yaw wrap-around case).
 - [ ] **S7 Verify + polish.** Full checklist below, tune speeds so the lag is visibly observable.
 - [ ] **S8 Submit.** DECISIONS.md, prompt log, final commit with time spent.
 
@@ -42,7 +42,7 @@ Per project rule: after every significant build stage, the diff goes to /codex-r
 
 ## Verification checklist (run at S7, spot-check each stage)
 
-- [ ] `npm run build`: zero TypeScript errors.
+- [x] `npm run build`: zero TypeScript errors (tsc clean at every stage).
 - [ ] Browser console on dev server: zero warnings/errors after several full drone loops.
 - [ ] Platform rotates slowly and continuously.
 - [ ] Drone loop is smooth and closed (no teleport at the seam).
@@ -58,3 +58,14 @@ Per project rule: after every significant build stage, the diff goes to /codex-r
 - **S0:** Adopted via private mirror (not a fork) so the repo can stay private until submission. Template README-showpiece assets stripped from the overlay; they're template-repo content and would be noise for reviewers.
 - **S0:** Prose mode set to normal instead of the template's caveman-ultra default: reviewers read the exported transcript, compressed replies would cost readability.
 - **S1:** Kept the starter Vite/TS config untouched; only additions so far are harness files and this journal.
+
+- **S2:** DARE ran full chain (artifacts in `.tmp/dare/turret-exhibit/`). Three distinct shapes surfaced; chose joint-space pursuit with the turret parented to the platform: "correct while rotating" becomes structural (worldToLocal each frame), the rate cap doubles as the smoothing mechanism, and the S2-quaternion shape's lesson (clamp pitch target BEFORE the rate step, never after) is folded in. Cap read as turret-local per-axis servo limit; stated assumption for DECISIONS.md.
+- **S2:** E-step's 20-min math harness skipped for budget; replaced with visual smoke checks (seam, lag engage, horizon dip, multi-lap wrap, console). Risk stated in the plan file.
+- **S2:** Plan sent to codex-review (gpt-5.6-sol, high reasoning, background) and a 5-agent Opus workflow (4 lenses + synthesis, background). Build proceeds without waiting; findings get a /why stress-test before changing course.
+- **Trap (recall-worthy):** three r185 `Object3D.worldToLocal` does NOT refresh matrixWorld; call `updateWorldMatrix(true,false)` on the turret mount (or rely on `getWorldPosition`, which does) before converting, or tracking uses last frame's platform pose.
+
+- **S3-S6:** Built in two commits (statics+drone, turret+controller). Opus workflow and Codex plan review both landed mid-build; accepted findings: shared clamped sim-time accumulator (drone and turret must consume the same dt or a tab stall teleports the drone past the turret's slew budget), damp-then-cap pursuit (pure clamp exits saturation with a velocity step), 170-deg yaw direction latch, zenith yaw hold, arcLengthDivisions=1000, pixel-ratio clamp. Rejected: cutting shadows/fog (already built and clean), vite.config dedupe (repo has exactly one three copy), separate turret module (single sectioned file reads fine at this size).
+- **Trap:** r185 deprecates THREE.Clock (constructor warns) and PCFSoftShadowMap (warns at first shadow render). Either alone fails the zero-warnings bar. Timer + PCFShadowMap. Caught by Codex review (Clock) and live console (shadow map).
+- **Refuted finding (kept for the record):** workflow claimed r185 worldToLocal reads a stale matrixWorld; pinned source shows it calls updateWorldMatrix(true,false) itself (Object3D.js:679). Redundant manual refresh removed.
+- **Verified numerically:** window.turretStats over ~20s / 2.5 laps: maxYawRate = maxPitchRate = 90.0 deg/s exactly (cap never exceeded), 757 saturated frames (lag regime engages). Console 0 errors / 0 warnings.
+- **S7 (in progress):** lab.html (gitignored, served by Vite) exposes look/feel knobs seeded at current values; user tunes, pastes JSON back, values get ported into main.ts. DECISIONS.md drafted early per workflow advice.
