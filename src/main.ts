@@ -122,7 +122,7 @@ for (let i = 0; i < 8; i++) {
 // Drone on a closed loop
 // ---------------------------------------------------------------------------
 
-const DRONE_PERIOD = 8; // seconds per lap; fast enough to outrun the turret on close passes
+const DRONE_PERIOD = 7; // seconds per lap; fast enough to outrun the turret on close passes
 
 const dronePath = new THREE.CatmullRomCurve3(
   [
@@ -223,6 +223,17 @@ const barrel = new THREE.Mesh(
 barrel.position.z = 0.7; // extends along the head's +Z (its aim direction)
 barrel.castShadow = true;
 head.add(barrel);
+
+// Aim ray: makes the rate cap observable. The gap between this ray and the
+// drone is the turret's lag; watching it close is the catch-up.
+const aimRay = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 1.3),
+    new THREE.Vector3(0, 0, 16),
+  ]),
+  new THREE.LineBasicMaterial({ color: 0xbf616a, transparent: true, opacity: 0.45 }),
+);
+head.add(aimRay);
 
 // ---------------------------------------------------------------------------
 // Tracking controller: rate-limited joint-space pursuit
