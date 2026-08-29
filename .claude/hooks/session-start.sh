@@ -42,35 +42,8 @@ fetch_with_retry() {
   return 1
 }
 
-# >>> caveman:directive:begin (managed by /init-project; delete the whole block,
-# markers included, when prose mode is "normal" -- keep it in sync with the
-# "Default prose mode" section of CLAUDE.md) >>>
-# Print the caveman-ultra session default to STDOUT.
-#
-# CRITICAL: this goes to stdout, NOT stderr. SessionStart injects context only
-# via stdout/additionalContext. stderr is user-visible diagnostic noise that
-# Claude never sees. The caveman default lives in CLAUDE.md, but project memory
-# is easy to miss at session start, so we re-assert it here as injected context
-# to make it the first thing Claude acts on. Keep it on stdout or it does nothing.
-print_caveman_directive() {
-  cat <<'CAVEMAN'
-[SessionStart] ACTIVE SESSION DEFAULT: caveman ultra (per CLAUDE.md).
-BEFORE your first reply, invoke the `caveman` skill at ultra intensity (Skill tool,
-args: "ultra") and apply that style to ALL prose replies for the entire session:
-terse, abbreviated, arrows for causality, full technical accuracy preserved. This
-persists across this and every future session until the user says "stop caveman" /
-"normal mode".
-  - Prose only. Code, commits, PRs, file contents, and symbol/function/API/error
-    strings stay normal and are never abbreviated.
-  - Auto-clarity carve-outs: security warnings, irreversible-action confirmations,
-    and ambiguous multi-step sequences drop to plain prose, then resume caveman.
-  - The caveman skill also carries the always-on unslop contract; invoking it
-    activates both. See "Unslop rides this skill" in the skill body.
-CAVEMAN
-}
-# <<< caveman:directive:end <<<
 
-# Always-on unslop default. Same stdout rule as the caveman directive above:
+# Always-on unslop default. Emitted to STDOUT so it lands in context:
 # stdout is injected context, stderr is invisible to Claude. The rule lives in
 # CLAUDE.md; re-assert here so it's acted on from the first written artifact.
 print_unslop_directive() {
@@ -92,12 +65,6 @@ print_skill_reminders() {
   cat >&2 <<'SKILLS'
 [SessionStart] Universal skills. Invoke proactively when the trigger fires:
 SKILLS
-  # >>> caveman:reminder:begin (managed by /init-project; delete the whole block,
-  # markers included, when prose mode is "normal") >>>
-  cat >&2 <<'SKILLS'
-  - caveman                       → FIRST, at session start: /caveman ultra (default prose mode)
-SKILLS
-  # <<< caveman:reminder:end <<<
   cat >&2 <<'SKILLS'
   - recall                        → BEFORE work in unfamiliar areas; /recall save <text> after gotchas
   - brainstorming                 → BEFORE designing new features or behavior changes
@@ -185,12 +152,6 @@ check_plugin_overlap() {
   fi
 }
 
-# >>> caveman:call:begin (managed by /init-project; delete the whole block,
-# markers included, when prose mode is "normal") >>>
-# Inject the caveman-ultra default into context FIRST (stdout), before any git
-# work or branch-specific exit. Independent of git state, so it runs every path.
-print_caveman_directive
-# <<< caveman:call:end <<<
 
 # Always-on unslop directive (stdout, every path).
 print_unslop_directive

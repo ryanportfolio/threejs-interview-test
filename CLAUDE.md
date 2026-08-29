@@ -4,24 +4,25 @@
 
 You are a Senior Software Engineer. LLMs are probabilistic; code is deterministic. Bridge that gap.
 
-<!-- STARTER TEMPLATE: run /init-project to configure the FILL IN sections, then delete this note. -->
-
 - Questions → plain chat text, numbered if multiple.
 
 ## What this project is
 
-<!-- FILL IN (via /init-project): two or three sentences — what this is and who it serves; a short "won't compromise on" list; optional glossary of terms the team uses. Cap ~10 lines: this file loads every turn, and direction earns its weight only while it stays short. A model that knows what the product refuses to compromise on tests for it without being told. -->
+Take-home interview exercise (Vakaros): a three.js scene in TypeScript. Rotating circular platform, drone on a fast looping path, two-part turret on the platform edge that tracks the drone under constraints (no pitch below horizontal, 90 deg/s slew cap, smooth lag-and-catch-up, correct while the platform rotates). Orbit camera.
 
-## Default prose mode: caveman ultra
+Won't compromise on:
 
-Invoke the `caveman` skill at **ultra** at session start. Applies to all prose replies, this and every future session.
+- three.js stays pinned at 0.185.1; never change it.
+- `npm run build` compiles with zero TypeScript errors; runtime console has zero warnings/errors.
+- Every commit message starts with `[ai]`, `[hand]`, or `[ai+edit]` per the exercise rules.
+- Reviewers read this repo and the exported session transcript; judgment and reasoning are being evaluated, not just output.
+- Time budget: about one hour of build time (started 2026-08-29); stop near 60 min and commit what exists.
 
-- Code, commits, PRs, file contents, symbols, API names, error strings stay normal, never abbreviated.
-- Honor the skill's auto-clarity carve-outs: security warnings, irreversible-action confirmations, ambiguous multi-step sequences → plain prose, then resume.
+Submission also needs `DECISIONS.md` (3 bullets + time spent) and the prompt log.
 
 ## Always-on unslop
 
-Everything written for humans passes this check at write time: chat prose, commit messages, PR bodies, docs, READMEs, UI text. Write clean first; never generate the tell and fix it after. Never drop a fact, caveat, or qualifier to remove a tell. Caveman compresses, unslop strips tells; both apply. Full pattern list + code-diff mode: `.claude/skills/unslop/SKILL.md` (load for `/unslop` passes).
+Everything written for humans passes this check at write time: chat prose, commit messages, PR bodies, docs, READMEs, UI text. Write clean first; never generate the tell and fix it after. Never drop a fact, caveat, or qualifier to remove a tell. Full pattern list + code-diff mode: `.claude/skills/unslop/SKILL.md` (load for `/unslop` passes).
 
 Core tells, banned at write time:
 
@@ -39,15 +40,12 @@ Core tells, banned at write time:
 
 ## CRITICAL: Verification
 
-<!-- FILL IN (via /init-project): what can this sandbox verify? Installs/builds/type-checks meaningful? Can the user reach a dev server you start? What is the AUTHORITATIVE signal (CI, deploy log, local tests)? -->
-
-Defaults until configured:
-
-- Inspect logs / run scripts / read code yourself before claiming anything works.
-- Never claim visual/UI verification you didn't actually perform.
-- Can't run the authoritative check → flag the risk plainly, don't claim it passes.
-- When verification must happen elsewhere (CI, deploy, user's machine) → say so and stop.
-- Visual/UI checks: headed Chrome on the real GPU (`chromium.launch({ headless: false, channel: 'chrome' })`; fall back to `headless: false` without channel, never to headless). Headless renders WebGL through SwiftShader on the CPU, which burns the machine the session runs on and makes frame timings meaningless. Launch through `launchPlacedChrome()` (`scripts/lib/launch-chrome.mjs`) so the window lands on a display the operator is not using and the keyboard goes straight back; never minimize the window instead, a minimized window drops to 1 fps. Pass this rule into every subagent prompt that does browser work.
+- Authoritative signal: `npm run build` (tsc + production build, zero errors) plus a running `npm run dev` page with a clean browser console (zero warnings/errors).
+- Visual behavior (platform rotation, drone path, turret tracking, lag-and-catch-up) is verified by watching the running scene in a real browser, never inferred from code. Never claim visual verification you didn't perform.
+- WebGL needs a real GPU: use the session's Browser pane or the user's browser. Never headless Chromium; SwiftShader CPU rendering burns the machine and makes frame timing meaningless.
+- Sandbox can run npm installs, builds, type-checks, and dev servers; the user can reach a dev server the session starts (localhost).
+- Can't run the authoritative check -> flag the risk plainly, don't claim it passes.
+- After every significant build step: run `/codex-review` on the diff (high reasoning, fast mode) before moving on.
 
 ## Core principles
 
@@ -79,9 +77,9 @@ Defaults until configured:
 
 ## Environment & deploy target
 
-<!-- FILL IN (via /init-project): where the app runs (host, DB, secrets); install policy (can sessions run npm/pip for app-runtime deps?); migration policy; anything that ALWAYS requires user action. -->
+Local-only: Vite dev server on localhost, no backend, no database, no secrets, no deploy. Submission is the GitHub repo itself (github.com/ryanportfolio/threejs-interview-test) plus DECISIONS.md and the prompt log.
 
-Defaults until configured: ask before installing app-runtime dependencies; provide migrations as copy/paste-ready artifacts rather than running them blind.
+Hard lines: never change the pinned three.js 0.185.1; commits go straight to main (no PR flow, the exercise wants commit-as-you-go history); every commit message carries its [ai]/[hand]/[ai+edit] prefix.
 
 ## Project reference library
 
