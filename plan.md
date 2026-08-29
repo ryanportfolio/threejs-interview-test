@@ -11,7 +11,7 @@ Running decision log for the Vakaros three.js exercise. Newest notes appended pe
 - [x] **S4 Drone path.** Smooth closed loop, above and around the platform, fast enough to outrun the turret cap at some point.
 - [x] **S5 Turret.** Two-part yaw base + pitch head on the platform edge; world-space tracking that stays correct while the parent platform rotates.
 - [x] **S6 Constraints.** Pitch floor at horizontal, 90 deg/s slew cap, lag-and-catch-up with no snap or jitter (watch the yaw wrap-around case).
-- [ ] **S7 Verify + polish.** Full checklist below, tune speeds so the lag is visibly observable.
+- [x] **S7 Verify + polish.** Full checklist below, tune speeds so the lag is visibly observable.
 - [ ] **S8 Submit.** DECISIONS.md, prompt log, final commit with time spent.
 
 Per project rule: after every significant build stage, the diff goes to /codex-review (high reasoning, fast mode) before moving on.
@@ -43,15 +43,15 @@ Per project rule: after every significant build stage, the diff goes to /codex-r
 ## Verification checklist (run at S7, spot-check each stage)
 
 - [x] `npm run build`: zero TypeScript errors (tsc clean at every stage).
-- [ ] Browser console on dev server: zero warnings/errors after several full drone loops.
-- [ ] Platform rotates slowly and continuously.
-- [ ] Drone loop is smooth and closed (no teleport at the seam).
-- [ ] Orbit camera: rotate/zoom/pan works from any angle.
-- [ ] Turret base yaws, head pitches, both parts visibly distinct, mounted on platform edge.
-- [ ] Head never pitches below horizontal (watch a low drone pass).
-- [ ] Turret visibly lags on fast passes, then catches up smoothly; no snap at the yaw 180 boundary.
-- [ ] Tracking stays locked while the platform rotates under the turret (pause drone motion mentally: aim shouldn't drift).
-- [ ] Commit history annotated `[ai]`/`[hand]`/`[ai+edit]`; DECISIONS.md and prompt log ready.
+- [x] Browser console on dev server: zero warnings/errors after several full drone loops.
+- [x] Platform rotates slowly and continuously (screenshots across time; rim markers move).
+- [x] Drone loop is smooth and closed (arc-length sampling, 1000-division table; watched multiple laps).
+- [x] Orbit camera: orbit/pan/zoom, middle-mouse pan added, legend top right.
+- [x] Turret base yaws, head pitches, visibly distinct parts, platform edge mount, 1.5x scale per user.
+- [x] Head never pitches below horizontal: drone demands -5.3 deg at the low pass, commanded pitch floors at exactly 0 (instrumented).
+- [x] Lag engages: peak aim error 89.9 deg with smooth recovery; max joint rate exactly 90.0 deg/s, never exceeded; 170-deg direction latch guards the 180 seam.
+- [x] Tracking correct under platform rotation: structural (turret parented to platform, worldToLocal per frame); mean aim error 8.3 deg, 75% of samples under 10 deg.
+- [x] Commit history annotated `[ai]`/`[hand]`/`[ai+edit]`; DECISIONS.md and prompt log ready.
 
 ## Decision log
 
@@ -69,3 +69,6 @@ Per project rule: after every significant build stage, the diff goes to /codex-r
 - **Refuted finding (kept for the record):** workflow claimed r185 worldToLocal reads a stale matrixWorld; pinned source shows it calls updateWorldMatrix(true,false) itself (Object3D.js:679). Redundant manual refresh removed.
 - **Verified numerically:** window.turretStats over ~20s / 2.5 laps: maxYawRate = maxPitchRate = 90.0 deg/s exactly (cap never exceeded), 757 saturated frames (lag regime engages). Console 0 errors / 0 warnings.
 - **S7 (in progress):** lab.html (gitignored, served by Vite) exposes look/feel knobs seeded at current values; user tunes, pastes JSON back, values get ported into main.ts. DECISIONS.md drafted early per workflow advice.
+
+- **S7:** Lab values ported ([ai+edit] commit); turret scaled 1.5x uniformly (angle math unaffected). Controls legend + middle-mouse pan added on user request.
+- **S7:** Codex code review vs upstream/main: zero findings in exercise code; three P2s in the harness overlay. Two confirmed and fixed (contract script ENOENT in spawned repos, skill reminders piped to stderr); third (brainstorming server auth) confirmed but template-scope, spawned as a separate task chip. GUIDE.md dead links to stripped template files also cleaned.

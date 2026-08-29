@@ -145,12 +145,8 @@ The script copies missing files. `-Force` overwrites. `-DryRun` previews.
 - POSIX bootstrap runs on macOS and Linux.
 - The Claude session hook uses Bash and is validated on Ubuntu in CI.
 
-## contributing and releases
-
-[CONTRIBUTING.md](CONTRIBUTING.md) defines the change process and verification checklist. [CHANGELOG.md](CHANGELOG.md) records released changes. Bug and skill-proposal templates live under `.github/ISSUE_TEMPLATE/`.
-
 ## provenance and license
 
-Harness Firmware is MIT licensed. See [LICENSE](LICENSE).
+Harness Firmware is MIT licensed (license text in the template repo: github.com/ryanportfolio/Harness-Firmware). Contribution process, changelog, and issue templates also live there; this spawned copy carries only the runtime harness.
 
 Several skills are forks of upstream work. Two are concept ports that copy no upstream code or text: `refine` from Prime Intellect's Continual Harness and `long-horizon` from AMAP-ML's LongHorizon-Harness. `.claude/skills/PROVENANCE.md` records origins, licenses, and local changes.
