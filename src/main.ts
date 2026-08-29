@@ -109,7 +109,7 @@ const dronePath = new THREE.CatmullRomCurve3(
     new THREE.Vector3(6.5, 2.2, 0),
     new THREE.Vector3(3.5, 4.2, 4.5),
     new THREE.Vector3(-3.0, 3.0, 6.0),
-    new THREE.Vector3(-6.5, 1.4, 0.5),
+    new THREE.Vector3(-6.5, 0.7, 0.5), // dips below the turret head's horizon: exercises the pitch floor
     new THREE.Vector3(-3.5, 2.6, -5.5),
     new THREE.Vector3(2.0, 4.6, -6.0),
     new THREE.Vector3(5.5, 1.6, -3.0),
@@ -236,6 +236,8 @@ export const turretStats = {
   saturatedFrames: 0,
   aimErrorDeg: 0, // current angle between barrel aim and true drone bearing
   maxAimErrorDeg: 0, // peak lag over the run
+  minUnclampedPitchDeg: 0, // most negative pitch the drone ever demanded
+  minCommandedPitchDeg: 0, // must stay >= 0: the pitch floor holding
 };
 const aimDir = new THREE.Vector3();
 const headWorld = new THREE.Vector3();
@@ -269,10 +271,11 @@ function updateTurret(dt: number): void {
   const desiredYaw =
     horizontal < ZENITH_EPS ? lastDesiredYaw : Math.atan2(targetLocal.x, targetLocal.z);
   lastDesiredYaw = desiredYaw;
-  const desiredPitch = THREE.MathUtils.clamp(
-    Math.atan2(targetLocal.y, horizontal),
-    0,
-    Math.PI / 2,
+  const rawPitch = Math.atan2(targetLocal.y, horizontal);
+  const desiredPitch = THREE.MathUtils.clamp(rawPitch, 0, Math.PI / 2);
+  turretStats.minUnclampedPitchDeg = Math.min(
+    turretStats.minUnclampedPitchDeg,
+    THREE.MathUtils.radToDeg(rawPitch),
   );
 
   // Shortest-arc yaw error, with hysteresis: once the error passes ~170 deg
@@ -288,6 +291,10 @@ function updateTurret(dt: number): void {
   const pitchStep = stepJoint(desiredPitch - pitchAngle, dt);
   yawAngle = wrapAngle(yawAngle + yawStep);
   pitchAngle += pitchStep;
+  turretStats.minCommandedPitchDeg = Math.min(
+    turretStats.minCommandedPitchDeg,
+    THREE.MathUtils.radToDeg(pitchAngle),
+  );
 
   if (dt > 0) {
     turretStats.maxYawRate = Math.max(turretStats.maxYawRate, Math.abs(yawStep) / dt);
