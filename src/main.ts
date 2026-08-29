@@ -14,11 +14,11 @@ renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoft is deprecated in r185 a
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1e26);
-scene.fog = new THREE.Fog(0x1a1e26, 25, 60);
+scene.background = new THREE.Color(0xaeffe4);
+scene.fog = new THREE.Fog(0xaeffe4, 25, 38);
 
 const camera = new THREE.PerspectiveCamera(
-  55,
+  59,
   window.innerWidth / window.innerHeight,
   0.1,
   200,
@@ -40,9 +40,9 @@ window.addEventListener('resize', () => {
 // Lights and ground
 // ---------------------------------------------------------------------------
 
-scene.add(new THREE.HemisphereLight(0x9db4ff, 0x2f2a24, 0.6));
+scene.add(new THREE.HemisphereLight(0x9db4ff, 0x2f2a24, 1.7));
 
-const sun = new THREE.DirectionalLight(0xfff2df, 2.4);
+const sun = new THREE.DirectionalLight(0xfff2df, 3.8);
 sun.position.set(6, 12, 5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -54,7 +54,7 @@ scene.add(sun);
 
 const ground = new THREE.Mesh(
   new THREE.CircleGeometry(40, 64).rotateX(-Math.PI / 2),
-  new THREE.MeshStandardMaterial({ color: 0x23272f, roughness: 1 }),
+  new THREE.MeshStandardMaterial({ color: 0x6c7891, roughness: 1 }),
 );
 ground.receiveShadow = true;
 scene.add(ground);
@@ -71,7 +71,7 @@ scene.add(platform);
 
 const deck = new THREE.Mesh(
   new THREE.CylinderGeometry(PLATFORM_RADIUS, PLATFORM_RADIUS * 1.05, 0.35, 64),
-  new THREE.MeshStandardMaterial({ color: 0x4c566a, roughness: 0.8 }),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }),
 );
 deck.position.y = 0.175;
 deck.castShadow = true;
@@ -161,6 +161,7 @@ function updateDrone(elapsed: number): void {
 // rotates" is structural: the controller always works in the mount's frame.
 const turretMount = new THREE.Group();
 turretMount.position.set(3.4, 0.35, 0);
+turretMount.scale.setScalar(1.5); // uniform scale: local-frame angles are unaffected
 platform.add(turretMount);
 
 const pedestal = new THREE.Mesh(
