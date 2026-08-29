@@ -45,7 +45,11 @@ Core tells, banned at write time:
 - WebGL needs a real GPU: use the session's Browser pane or the user's browser. Never headless Chromium; SwiftShader CPU rendering burns the machine and makes frame timing meaningless.
 - Sandbox can run npm installs, builds, type-checks, and dev servers; the user can reach a dev server the session starts (localhost).
 - Can't run the authoritative check -> flag the risk plainly, don't claim it passes.
-- After every significant build step: run `/codex-review` on the diff (high reasoning, fast mode) before moving on.
+
+## Standing project rules
+
+- `plan.md` is a running journal: decision process, assumptions, challenges, build/config traps, stage sequence with current position, verification checklist. Update it at every significant step; anything saved via `/recall` also gets a line there.
+- After every significant build step, run `/codex-review` on the diff (high reasoning, fast mode) before moving on.
 
 ## Core principles
 
