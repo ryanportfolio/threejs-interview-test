@@ -7,10 +7,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ---------------------------------------------------------------------------
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoft is deprecated in r185 and warns
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -117,6 +117,7 @@ const dronePath = new THREE.CatmullRomCurve3(
   true,
   'centripetal',
 );
+dronePath.arcLengthDivisions = 1000; // fine-grained arc-length table: no speed hitch at the seam
 
 const drone = new THREE.Group();
 scene.add(drone);
@@ -153,18 +154,164 @@ function updateDrone(elapsed: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Turret: yaw base + pitch head, mounted on the platform edge
+// ---------------------------------------------------------------------------
+
+// Parented to the platform, so "tracking stays correct while the platform
+// rotates" is structural: the controller always works in the mount's frame.
+const turretMount = new THREE.Group();
+turretMount.position.set(3.4, 0.35, 0);
+platform.add(turretMount);
+
+const pedestal = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.32, 0.4, 0.2, 24),
+  new THREE.MeshStandardMaterial({ color: 0x3b4252, roughness: 0.7 }),
+);
+pedestal.position.y = 0.1;
+pedestal.castShadow = true;
+turretMount.add(pedestal);
+
+const yawBase = new THREE.Group();
+yawBase.position.y = 0.2;
+turretMount.add(yawBase);
+
+const baseHousing = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.34, 0.34, 0.3, 24),
+  new THREE.MeshStandardMaterial({ color: 0x5e81ac, roughness: 0.55 }),
+);
+baseHousing.position.y = 0.15;
+baseHousing.castShadow = true;
+yawBase.add(baseHousing);
+
+const HEAD_PIVOT_Y = 0.45; // above the yaw base origin
+const head = new THREE.Group();
+head.position.y = HEAD_PIVOT_Y;
+yawBase.add(head);
+
+const headHousing = new THREE.Mesh(
+  new THREE.BoxGeometry(0.36, 0.3, 0.5),
+  new THREE.MeshStandardMaterial({ color: 0x81a1c1, roughness: 0.5 }),
+);
+headHousing.castShadow = true;
+head.add(headHousing);
+
+const barrel = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.055, 0.055, 1.1, 12).rotateX(Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0xd8dee9, roughness: 0.35 }),
+);
+barrel.position.z = 0.7; // extends along the head's +Z (its aim direction)
+barrel.castShadow = true;
+head.add(barrel);
+
+// ---------------------------------------------------------------------------
+// Tracking controller: rate-limited joint-space pursuit
+// ---------------------------------------------------------------------------
+
+const MAX_TURN_RATE = Math.PI / 2; // 90 deg/s, per axis (read as a servo limit)
+
+let yawAngle = 0;
+let pitchAngle = 0;
+
+const targetWorld = new THREE.Vector3();
+const targetLocal = new THREE.Vector3();
+
+/** Wrap an angle to (-PI, PI] so errors always take the shortest arc. */
+function wrapAngle(a: number): number {
+  return THREE.MathUtils.euclideanModulo(a + Math.PI, Math.PI * 2) - Math.PI;
+}
+
+// Pursuit shaping: the hard cap is the requirement; the damp constant eases
+// the approach so leaving saturation doesn't stop on a velocity step.
+const APPROACH_DAMP = 12; // 1/s
+const YAW_LATCH_ENTER = THREE.MathUtils.degToRad(170);
+const ZENITH_EPS = 0.25; // horizontal distance under which yaw is held
+
+let yawLatchDir = 0; // -1 | 0 | 1; latched turn direction near the 180 deg seam
+let lastDesiredYaw = 0;
+
+// Verification instrumentation (read from the console/devtools; renders nothing).
+export const turretStats = { maxYawRate: 0, maxPitchRate: 0, saturatedFrames: 0 };
+declare global {
+  interface Window {
+    turretStats: typeof turretStats;
+  }
+}
+window.turretStats = turretStats;
+
+function stepJoint(err: number, dt: number): number {
+  // Exponential approach clamped by the hard 90 deg/s cap: saturated when
+  // far behind (pure lag), easing in as the error closes (smooth catch-up).
+  const eased = err * (1 - Math.exp(-APPROACH_DAMP * dt));
+  return THREE.MathUtils.clamp(eased, -MAX_TURN_RATE * dt, MAX_TURN_RATE * dt);
+}
+
+function updateTurret(dt: number): void {
+  // worldToLocal refreshes the mount's ancestor matrices itself (r185), so
+  // this sees the platform rotation applied earlier in the same frame.
+  drone.getWorldPosition(targetWorld);
+  targetLocal.copy(targetWorld);
+  turretMount.worldToLocal(targetLocal);
+  targetLocal.y -= yawBase.position.y + HEAD_PIVOT_Y; // aim from the head pivot
+
+  // Desired joint angles. Pitch is clamped BEFORE the rate step, so the
+  // commanded target never dips below horizontal and the head never has to
+  // "catch up" from an illegal pose. Directly-overhead targets leave yaw
+  // undefined; hold the last heading and let pitch do the work.
+  const horizontal = Math.hypot(targetLocal.x, targetLocal.z);
+  const desiredYaw =
+    horizontal < ZENITH_EPS ? lastDesiredYaw : Math.atan2(targetLocal.x, targetLocal.z);
+  lastDesiredYaw = desiredYaw;
+  const desiredPitch = THREE.MathUtils.clamp(
+    Math.atan2(targetLocal.y, horizontal),
+    0,
+    Math.PI / 2,
+  );
+
+  // Shortest-arc yaw error, with hysteresis: once the error passes ~170 deg
+  // the turn direction is latched until the error shrinks, so a target
+  // hovering near the 180 deg seam can't flip the chase direction per frame.
+  let yawErr = wrapAngle(desiredYaw - yawAngle);
+  if (yawLatchDir !== 0 && Math.sign(yawErr) !== yawLatchDir && Math.abs(yawErr) > YAW_LATCH_ENTER) {
+    yawErr += yawLatchDir * Math.PI * 2;
+  }
+  yawLatchDir = Math.abs(yawErr) > YAW_LATCH_ENTER ? Math.sign(yawErr) : 0;
+
+  const yawStep = stepJoint(yawErr, dt);
+  const pitchStep = stepJoint(desiredPitch - pitchAngle, dt);
+  yawAngle = wrapAngle(yawAngle + yawStep);
+  pitchAngle += pitchStep;
+
+  if (dt > 0) {
+    turretStats.maxYawRate = Math.max(turretStats.maxYawRate, Math.abs(yawStep) / dt);
+    turretStats.maxPitchRate = Math.max(turretStats.maxPitchRate, Math.abs(pitchStep) / dt);
+    if (Math.abs(yawStep) >= MAX_TURN_RATE * dt * 0.999) turretStats.saturatedFrames++;
+  }
+
+  yawBase.rotation.y = yawAngle;
+  head.rotation.x = -pitchAngle; // rotating -X raises the +Z barrel
+}
+
+// ---------------------------------------------------------------------------
 // Render loop
 // ---------------------------------------------------------------------------
 
-const clock = new THREE.Clock();
+// THREE.Clock is deprecated in r185 (its constructor warns to the console,
+// which alone would fail the zero-warnings bar); Timer is its replacement.
+const timer = new THREE.Timer();
+
+// One clamped dt drives platform, drone, and turret alike, accumulated into
+// a shared sim time: after a background-tab stall everything resumes in
+// lockstep instead of the drone teleporting ahead of the turret's slew budget.
+let simTime = 0;
 
 renderer.setAnimationLoop(() => {
-  // Clamp dt so a backgrounded tab can't teleport the simulation on return.
-  const dt = Math.min(clock.getDelta(), 0.05);
-  const elapsed = clock.elapsedTime;
+  timer.update();
+  const dt = Math.min(timer.getDelta(), 0.05);
+  simTime += dt;
 
-  platform.rotation.y += PLATFORM_SPIN * dt;
-  updateDrone(elapsed);
+  platform.rotation.y = wrapAngle(PLATFORM_SPIN * simTime);
+  updateDrone(simTime);
+  updateTurret(dt);
 
   controls.update();
   renderer.render(scene, camera);
