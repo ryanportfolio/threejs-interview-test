@@ -75,7 +75,7 @@ with or without `--disable-features=CalculateNativeWinOcclusion`. Screenshots
 still return fresh pixels at 1 Hz, so a static DOM check passes while every
 frame timing, scroll narrative and animation reading is garbage.
 
-Fix: `scripts/lib/launch-chrome.mjs` -> `launchPlacedChrome()`. It places the
+Fix: `scripts/lib/launch-chrome.mjs` (lives in the Harness-Firmware template repo; not shipped in this spawned copy) -> `launchPlacedChrome()`. It places the
 window on a display that is not holding the foreground window, then hands the
 foreground back to the window that had it. `CHROME_PLACE` picks the mode:
 `other-monitor` (default), `offscreen` (parked at -2400,-2400, rendered but
@@ -97,7 +97,7 @@ with its own connection) cannot share that profile: the second gets
 Fixes: the template ships `.mcp.json` defining `playwright-iso`
 (`@playwright/mcp@latest --isolated`, in-memory profile, N concurrent agents);
 or drive an independent Chrome via a repo-local `playwright-core` +
-`scripts/lib/launch-chrome.mjs`. Never point a verifier subagent and the main
+the template's `scripts/lib/launch-chrome.mjs`. Never point a verifier subagent and the main
 session at the shared plugin browser at the same time.
 
 ## Bash tool cwd resets between calls (2026-08-29)
