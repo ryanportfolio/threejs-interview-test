@@ -703,13 +703,16 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// Dismiss the loading splash once the scene is rendering, holding it just long
-// enough that one full turret shot is always seen.
+// Dismiss the loading splash only on a loop boundary, at least one full pass:
+// the shot-and-tumble choreography never gets cut mid-animation. The splash
+// timeline starts with the page, so performance.now() tracks its clock.
 const loaderEl = document.getElementById('loader');
 if (loaderEl) {
-  const MIN_SPLASH_MS = 1700;
+  const LOOP_MS = 2400; // matches the SMIL dur in index.html
+  const elapsed = performance.now();
+  const holdMs = Math.max(LOOP_MS, Math.ceil(elapsed / LOOP_MS) * LOOP_MS) - elapsed;
   window.setTimeout(() => {
     loaderEl.classList.add('done');
     window.setTimeout(() => loaderEl.remove(), 450);
-  }, Math.max(0, MIN_SPLASH_MS - performance.now()));
+  }, holdMs);
 }
