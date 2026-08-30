@@ -702,3 +702,14 @@ renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
 });
+
+// Dismiss the loading splash once the scene is rendering, holding it just long
+// enough that one full turret shot is always seen.
+const loaderEl = document.getElementById('loader');
+if (loaderEl) {
+  const MIN_SPLASH_MS = 1700;
+  window.setTimeout(() => {
+    loaderEl.classList.add('done');
+    window.setTimeout(() => loaderEl.remove(), 450);
+  }, Math.max(0, MIN_SPLASH_MS - performance.now()));
+}
