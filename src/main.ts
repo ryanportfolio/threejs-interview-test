@@ -17,7 +17,7 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xaeffe4);
-scene.fog = new THREE.Fog(0xaeffe4, 25, 38);
+scene.fog = new THREE.Fog(0xaeffe4, 15, 30);
 
 const camera = new THREE.PerspectiveCamera(
   59,
@@ -62,9 +62,9 @@ window.addEventListener('resize', () => {
 // Lights and ground
 // ---------------------------------------------------------------------------
 
-scene.add(new THREE.HemisphereLight(0x9db4ff, 0x2f2a24, 1.7));
+scene.add(new THREE.HemisphereLight(0x9db4ff, 0x2f2a24, 0.6));
 
-const sun = new THREE.DirectionalLight(0xfff2df, 3.8);
+const sun = new THREE.DirectionalLight(0xfff2df, 3.0);
 sun.position.set(6, 12, 5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -85,16 +85,68 @@ const ground = new THREE.Mesh(
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Faint concentric rings under the flight path give the ground depth and scale.
-const ringMat = new THREE.LineBasicMaterial({ color: 0x59647e, transparent: true, opacity: 0.5 });
-for (const radius of [5.5, 7.5]) {
-  const pts: THREE.Vector3[] = [];
-  for (let i = 0; i <= 96; i++) {
-    const a = (i / 96) * Math.PI * 2;
-    pts.push(new THREE.Vector3(Math.cos(a) * radius, 0.01, Math.sin(a) * radius));
-  }
-  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), ringMat));
-}
+// Black-hole vortex under the platform (lab-tuned): event-horizon core, six
+// rotating spokes, wide soft glow. Values dialed in by hand via the look lab.
+const bhUniforms = {
+  uTime: { value: 0 },
+  uDiscR: { value: 9 },
+  uHoleR: { value: 5.1 },
+  uTwist: { value: 0 },
+  uSpeed: { value: -0.7 },
+  uArms: { value: 6 },
+  uArmC: { value: 0.95 },
+  uGlowW: { value: 2.9 },
+  uGlowI: { value: 0.4 },
+  uGlow: { value: new THREE.Color(0x8be8ff) },
+  uInner: { value: new THREE.Color(0x10131c) },
+  uBase: { value: new THREE.Color(0x6c7891) },
+};
+const vortex = new THREE.Mesh(
+  new THREE.CircleGeometry(30, 96).rotateX(-Math.PI / 2),
+  new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: bhUniforms,
+    vertexShader: `
+      varying vec2 vPos;
+      void main() {
+        vPos = position.xz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime, uDiscR, uHoleR, uTwist, uSpeed, uArms, uArmC, uGlowW, uGlowI;
+      uniform vec3 uGlow, uInner, uBase;
+      varying vec2 vPos;
+      void main() {
+        float r = length(vPos);
+        float t = clamp(r / uDiscR, 0.0, 1.0);
+        float ang = atan(vPos.y, vPos.x);
+        float swirl = ang + uTwist / (0.18 + t) + uTime * uSpeed;
+        float arm = 0.5 + 0.5 * sin(swirl * uArms + t * 16.0);
+        float armFade = 1.0 - smoothstep(0.15, 0.95, t);
+        vec3 col = mix(uInner, uBase, smoothstep(0.12, 0.85, t));
+        col *= 1.0 - uArmC * arm * armFade;
+        float core = 1.0 - smoothstep(uHoleR * 0.55, uHoleR, r);
+        col = mix(col, vec3(0.0), core);
+        float ring = exp(-pow((r - uHoleR) / uGlowW, 2.0)) * uGlowI;
+        col += uGlow * ring;
+        float alpha = 1.0 - smoothstep(uDiscR * 0.75, uDiscR, r);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+  }),
+);
+vortex.position.y = 0.02;
+scene.add(vortex);
+// Transparent catcher so drone and turret shadows still land over the vortex.
+const shadowCatcher = new THREE.Mesh(
+  new THREE.CircleGeometry(30, 64).rotateX(-Math.PI / 2),
+  new THREE.ShadowMaterial({ opacity: 0.3 }),
+);
+shadowCatcher.position.y = 0.03;
+shadowCatcher.receiveShadow = true;
+scene.add(shadowCatcher);
 
 // ---------------------------------------------------------------------------
 // Rotating platform
@@ -420,7 +472,7 @@ declare global {
 }
 window.turretStats = turretStats;
 // Camera handle for scripted visual checks (screenshot positioning).
-Object.assign(window, { exhibit: { camera, controls } });
+Object.assign(window, { exhibit: { camera, controls, drone } });
 
 function stepJoint(err: number, dt: number): number {
   // Exponential approach clamped by the hard 90 deg/s cap: saturated when
@@ -506,6 +558,7 @@ renderer.setAnimationLoop(() => {
   simTime += dt;
 
   platform.rotation.y = wrapAngle(PLATFORM_SPIN * simTime);
+  bhUniforms.uTime.value = simTime;
   updateDrone(simTime, dt);
   updateTurret(dt);
 
