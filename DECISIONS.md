@@ -1,6 +1,6 @@
 # Decisions
 
-Time spent: [FILL AT SUBMIT]. Core requirements were built and verified inside the hour; visual polish, the debug overlay, and review-driven hardening continued afterward at my direction, all visible in the commit timestamps.
+Time spent: about 70 minutes wall clock end to end (first candidate commit 19:25, last 20:23, plus a few minutes of repo setup before the first commit). The core scene and constrained tracking were built and verified inside the hour; the remainder was visual polish, the debug overlay, and review-driven hardening, all visible in the commit timestamps.
 
 - **Delegated vs. did myself.** AI wrote essentially all code and ran a first-principles planning pass that produced three candidate architectures; I kept the judgment calls: which architecture to build (turret parented to the rotating platform, so correct-under-rotation is structural rather than computed), which review findings to accept or reject, the look of the scene (hand-tuned through a live slider lab, ported back as the `[ai+edit]` commits), and the reading of the ambiguous 90 deg/s cap. The cap now bounds the combined yaw+pitch joint step, which satisfies every joint-space reading; platform spin can still add world-frame speed, and that residual assumption is deliberate: a turret is not responsible for its vehicle's motion.
 

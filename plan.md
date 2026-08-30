@@ -12,7 +12,7 @@ Running decision log for the Vakaros three.js exercise. Newest notes appended pe
 - [x] **S5 Turret.** Two-part yaw base + pitch head on the platform edge; world-space tracking that stays correct while the parent platform rotates.
 - [x] **S6 Constraints.** Pitch floor at horizontal, 90 deg/s slew cap, lag-and-catch-up with no snap or jitter (watch the yaw wrap-around case).
 - [x] **S7 Verify + polish.** Full checklist below, tune speeds so the lag is visibly observable.
-- [ ] **S8 Submit.** DECISIONS.md, prompt log, final commit with time spent.
+- [x] **S8 Submit.** DECISIONS.md finalized with time spent; prompt log = exported session transcript (sent alongside the repo link); lab.html deleted per the lab contract.
 
 Per project rule: after every significant build stage, the diff goes to /codex-review (high reasoning, fast mode) before moving on.
 
@@ -86,3 +86,5 @@ Per project rule: after every significant build stage, the diff goes to /codex-r
 - **Debug overlay added (user request):** off by default, D key or button; aim ray, true-bearing line, flight path, HUD with live cap/floor/saturation numbers. The turret's constraint compliance is now demonstrable on screen, not just in stats.
 
 - **Loading splash (user request):** inline SVG/SMIL animation in index.html: 2D silhouette of the scene where the turret tracks a crossing drone with lag, fires a beam at the aligned moment, sparks fly, the drone tumbles, looping. Visible before the JS bundle loads (the real loading window); main.ts fades it out after the first rendered frame, holding a 1.7s minimum so one shot always lands. Pure page dressing, outside the exercise rules by design. SMIL chosen over CSS transforms to avoid SVG transform-origin cross-browser traps.
+
+- **S8 close-out:** final `npm run build` clean; fog far 61 was the last tune. DECISIONS.md time filled from commit timestamps (~70 min wall clock). lab.html deleted and verified gone (was gitignored throughout, never committed). Remaining sends are outside the repo: export this session transcript as the prompt log, grant the reviewers access to the private repo (or flip visibility) and email the link per the invitation.
