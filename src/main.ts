@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // Renderer, scene, camera
 // ---------------------------------------------------------------------------
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -49,13 +49,17 @@ legend.textContent = [
   'Left drag: orbit',
   'Right / middle drag: pan',
   'Scroll: zoom',
+  'D: debug overlay',
 ].join('\n');
 document.body.appendChild(legend);
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  // Zero-height windows would put Infinity into the projection matrix.
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h);
 });
 
 // ---------------------------------------------------------------------------
@@ -73,7 +77,7 @@ sun.shadow.camera.right = 9;
 sun.shadow.camera.top = 9;
 sun.shadow.camera.bottom = -9;
 sun.shadow.radius = 4;
-sun.shadow.blurSamples = 10;
+sun.shadow.blurSamples = 8;
 sun.shadow.bias = 0;
 sun.shadow.normalBias = 0.02;
 scene.add(sun);
@@ -87,64 +91,88 @@ scene.add(ground);
 
 // Black-hole vortex under the platform (lab-tuned): event-horizon core, six
 // rotating spokes, wide soft glow. Values dialed in by hand via the look lab.
-const bhUniforms = {
-  uTime: { value: 0 },
-  uDiscR: { value: 9 },
-  uHoleR: { value: 5.1 },
-  uTwist: { value: 0 },
-  uSpeed: { value: -0.7 },
-  uArms: { value: 6 },
-  uArmC: { value: 0.95 },
-  uGlowW: { value: 2.9 },
-  uGlowI: { value: 0.4 },
-  uGlow: { value: new THREE.Color(0x8be8ff) },
-  uInner: { value: new THREE.Color(0x10131c) },
-  uBase: { value: new THREE.Color(0x6c7891) },
-};
+// Fog chunks are included so the disc fogs like the ground under it; tone
+// mapping / colorspace chunks are deliberately NOT included, so the effect
+// renders exactly as it looked in the lab where the values were tuned.
+const BH_DISC_RADIUS = 9;
+const BH_SPEED = -0.7; // rad/s spoke rotation; phase accumulates CPU-side, wrapped
+const bhUniforms = THREE.UniformsUtils.merge([
+  THREE.UniformsLib['fog'],
+  {
+    uPhase: { value: 0 },
+    uDiscR: { value: BH_DISC_RADIUS },
+    uHoleR: { value: 5.1 },
+    uTwist: { value: 0 },
+    uArms: { value: 6 },
+    uArmC: { value: 0.95 },
+    uGlowW: { value: 2.9 },
+    uGlowI: { value: 0.4 },
+    uGlow: { value: new THREE.Color(0x8be8ff) },
+    uInner: { value: new THREE.Color(0x10131c) },
+    uBase: { value: new THREE.Color(0x6c7891) },
+  },
+]);
 const vortex = new THREE.Mesh(
-  new THREE.CircleGeometry(30, 96).rotateX(-Math.PI / 2),
+  new THREE.CircleGeometry(BH_DISC_RADIUS, 96).rotateX(-Math.PI / 2),
   new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
+    fog: true,
     uniforms: bhUniforms,
     vertexShader: `
+      #include <fog_pars_vertex>
       varying vec2 vPos;
       void main() {
         vPos = position.xz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
       }
     `,
     fragmentShader: `
-      uniform float uTime, uDiscR, uHoleR, uTwist, uSpeed, uArms, uArmC, uGlowW, uGlowI;
+      #include <fog_pars_fragment>
+      uniform float uPhase, uDiscR, uHoleR, uTwist, uArms, uArmC, uGlowW, uGlowI;
       uniform vec3 uGlow, uInner, uBase;
       varying vec2 vPos;
       void main() {
+        float discR = max(uDiscR, 1e-3);
+        float holeR = max(uHoleR, 1e-3);
+        float glowW = max(uGlowW, 1e-3);
         float r = length(vPos);
-        float t = clamp(r / uDiscR, 0.0, 1.0);
-        float ang = atan(vPos.y, vPos.x);
-        float swirl = ang + uTwist / (0.18 + t) + uTime * uSpeed;
+        if (r >= discR) discard;
+        float t = r / discR;
+        // atan(0,0) is undefined in GLSL; the exact center needs a guard.
+        float ang = r > 1e-4 ? atan(vPos.y, vPos.x) : 0.0;
+        float swirl = ang + uTwist / (0.18 + t) + uPhase;
         float arm = 0.5 + 0.5 * sin(swirl * uArms + t * 16.0);
         float armFade = 1.0 - smoothstep(0.15, 0.95, t);
         vec3 col = mix(uInner, uBase, smoothstep(0.12, 0.85, t));
         col *= 1.0 - uArmC * arm * armFade;
-        float core = 1.0 - smoothstep(uHoleR * 0.55, uHoleR, r);
+        float core = 1.0 - smoothstep(holeR * 0.55, holeR, r);
         col = mix(col, vec3(0.0), core);
-        float ring = exp(-pow((r - uHoleR) / uGlowW, 2.0)) * uGlowI;
+        // pow() with a negative base is undefined in GLSL; square by hand.
+        float ringOffset = (r - holeR) / glowW;
+        float ring = exp(-(ringOffset * ringOffset)) * uGlowI;
         col += uGlow * ring;
-        float alpha = 1.0 - smoothstep(uDiscR * 0.75, uDiscR, r);
+        float alpha = 1.0 - smoothstep(discR * 0.75, discR, r);
         gl_FragColor = vec4(col, alpha);
+        #include <fog_fragment>
       }
     `,
   }),
 );
 vortex.position.y = 0.02;
+vortex.renderOrder = 1;
 scene.add(vortex);
 // Transparent catcher so drone and turret shadows still land over the vortex.
+// depthWrite off: an invisible depth wall here can reject the vortex behind it
+// when transparent sorting flips at grazing camera angles.
 const shadowCatcher = new THREE.Mesh(
-  new THREE.CircleGeometry(30, 64).rotateX(-Math.PI / 2),
-  new THREE.ShadowMaterial({ opacity: 0.3 }),
+  new THREE.CircleGeometry(12, 64).rotateX(-Math.PI / 2),
+  new THREE.ShadowMaterial({ opacity: 0.3, depthWrite: false }),
 );
 shadowCatcher.position.y = 0.03;
+shadowCatcher.renderOrder = 2;
 shadowCatcher.receiveShadow = true;
 scene.add(shadowCatcher);
 
@@ -246,6 +274,7 @@ const discGeo = new THREE.CircleGeometry(0.155, 24).rotateX(-Math.PI / 2);
 const discMat = new THREE.MeshBasicMaterial({
   color: 0x2f3440, transparent: true, opacity: 0.18, side: THREE.DoubleSide,
 });
+discMat.forceSinglePass = true; // flat disc: the two-pass transparent path buys nothing
 for (const sx of [-1, 1]) {
   for (const sz of [-1, 1]) {
     const px = sx * 0.27;
@@ -312,7 +341,7 @@ function updateDrone(elapsed: number, dt: number): void {
   tangentPrev.copy(tangentNow);
   drone.rotateZ(bankAngle);
 
-  for (const p of props) p.spinner.rotation.y += p.dir * 45 * dt;
+  for (const p of props) p.spinner.rotation.y = wrapAngle(p.spinner.rotation.y + p.dir * 45 * dt);
   tailMat.emissiveIntensity = elapsed % 1 < 0.12 ? 3 : 0.15; // strobe
 }
 
@@ -428,6 +457,61 @@ const aimRay = new THREE.Line(
 head.add(aimRay);
 
 // ---------------------------------------------------------------------------
+// Debug overlay (off by default; button or D key): visual + numeric evidence
+// that the constraints hold. Green line = true bearing to the drone; red ray =
+// where the turret actually points; the angle between them is the lag.
+// ---------------------------------------------------------------------------
+
+const bearingGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(),
+  new THREE.Vector3(),
+]);
+const bearingLine = new THREE.Line(
+  bearingGeo,
+  new THREE.LineBasicMaterial({ color: 0x2fd27d, transparent: true, opacity: 0.7 }),
+);
+bearingLine.frustumCulled = false;
+scene.add(bearingLine);
+
+const pathLine = new THREE.LineLoop(
+  new THREE.BufferGeometry().setFromPoints(dronePath.getPoints(240)),
+  new THREE.LineBasicMaterial({ color: 0xd8a657, transparent: true, opacity: 0.5 }),
+);
+scene.add(pathLine);
+
+const hud = document.createElement('div');
+hud.style.cssText = [
+  'position:fixed', 'bottom:12px', 'left:12px', 'padding:10px 14px',
+  'background:rgba(20, 26, 34, 0.8)', 'color:#d9e2ec',
+  'font:12px/1.75 ui-monospace, Consolas, monospace', 'border-radius:6px',
+  'pointer-events:none', 'white-space:pre',
+].join(';');
+document.body.appendChild(hud);
+
+let debugOn = false;
+const debugButton = document.createElement('button');
+debugButton.style.cssText = [
+  'position:fixed', 'top:122px', 'right:12px', 'padding:5px 12px',
+  'background:rgba(20, 26, 34, 0.72)', 'color:#e8edf4', 'border:1px solid #4a5568',
+  'font:12px system-ui, sans-serif', 'border-radius:6px', 'cursor:pointer',
+].join(';');
+document.body.appendChild(debugButton);
+
+function setDebug(on: boolean): void {
+  debugOn = on;
+  aimRay.visible = on;
+  bearingLine.visible = on;
+  pathLine.visible = on;
+  hud.style.display = on ? 'block' : 'none';
+  debugButton.textContent = on ? 'Debug: on' : 'Debug: off';
+}
+setDebug(false);
+debugButton.addEventListener('click', () => setDebug(!debugOn));
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'd' || e.key === 'D') setDebug(!debugOn);
+});
+
+// ---------------------------------------------------------------------------
 // Tracking controller: rate-limited joint-space pursuit
 // ---------------------------------------------------------------------------
 
@@ -457,9 +541,14 @@ let lastDesiredYaw = 0;
 export const turretStats = {
   maxYawRate: 0,
   maxPitchRate: 0,
+  maxCombinedRate: 0, // magnitude of the joint step vector: the capped quantity
   saturatedFrames: 0,
   aimErrorDeg: 0, // current angle between barrel aim and true drone bearing
   maxAimErrorDeg: 0, // peak lag over the run
+  rateDeg: 0, // live combined joint rate this frame
+  rawPitchDeg: 0, // live pitch demand before the floor clamp
+  pitchDeg: 0, // live commanded pitch
+  frames: 0,
   minUnclampedPitchDeg: 0, // most negative pitch the drone ever demanded
   minCommandedPitchDeg: 0, // must stay >= 0: the pitch floor holding
 };
@@ -474,11 +563,23 @@ window.turretStats = turretStats;
 // Camera handle for scripted visual checks (screenshot positioning).
 Object.assign(window, { exhibit: { camera, controls, drone } });
 
-function stepJoint(err: number, dt: number): number {
-  // Exponential approach clamped by the hard 90 deg/s cap: saturated when
-  // far behind (pure lag), easing in as the error closes (smooth catch-up).
-  const eased = err * (1 - Math.exp(-APPROACH_DAMP * dt));
-  return THREE.MathUtils.clamp(eased, -MAX_TURN_RATE * dt, MAX_TURN_RATE * dt);
+// Exponential approach clamped by the hard 90 deg/s cap: saturated when far
+// behind (pure lag), easing in as the error closes (smooth catch-up). The cap
+// applies to the COMBINED yaw+pitch step vector, so total turret rotation
+// relative to its mount never exceeds 90 deg/s under any reading of the rule
+// (which also bounds each individual axis).
+function stepJoints(yawErr: number, pitchErr: number, dt: number): [number, number] {
+  const ease = 1 - Math.exp(-APPROACH_DAMP * dt);
+  let yawStep = yawErr * ease;
+  let pitchStep = pitchErr * ease;
+  const maxStep = MAX_TURN_RATE * dt;
+  const stepLen = Math.hypot(yawStep, pitchStep);
+  if (stepLen > maxStep) {
+    const scale = maxStep / stepLen;
+    yawStep *= scale;
+    pitchStep *= scale;
+  }
+  return [yawStep, pitchStep];
 }
 
 function updateTurret(dt: number): void {
@@ -513,8 +614,7 @@ function updateTurret(dt: number): void {
   }
   yawLatchDir = Math.abs(yawErr) > YAW_LATCH_ENTER ? Math.sign(yawErr) : 0;
 
-  const yawStep = stepJoint(yawErr, dt);
-  const pitchStep = stepJoint(desiredPitch - pitchAngle, dt);
+  const [yawStep, pitchStep] = stepJoints(yawErr, desiredPitch - pitchAngle, dt);
   yawAngle = wrapAngle(yawAngle + yawStep);
   pitchAngle += pitchStep;
   turretStats.minCommandedPitchDeg = Math.min(
@@ -525,8 +625,14 @@ function updateTurret(dt: number): void {
   if (dt > 0) {
     turretStats.maxYawRate = Math.max(turretStats.maxYawRate, Math.abs(yawStep) / dt);
     turretStats.maxPitchRate = Math.max(turretStats.maxPitchRate, Math.abs(pitchStep) / dt);
-    if (Math.abs(yawStep) >= MAX_TURN_RATE * dt * 0.999) turretStats.saturatedFrames++;
+    const combined = Math.hypot(yawStep, pitchStep);
+    turretStats.rateDeg = THREE.MathUtils.radToDeg(combined / dt);
+    turretStats.maxCombinedRate = Math.max(turretStats.maxCombinedRate, combined / dt);
+    if (combined >= MAX_TURN_RATE * dt * 0.999) turretStats.saturatedFrames++;
+    turretStats.frames++;
   }
+  turretStats.rawPitchDeg = THREE.MathUtils.radToDeg(rawPitch);
+  turretStats.pitchDeg = THREE.MathUtils.radToDeg(pitchAngle);
 
   yawBase.rotation.y = yawAngle;
   head.rotation.x = -pitchAngle; // rotating -X raises the +Z barrel
@@ -546,26 +652,53 @@ function updateTurret(dt: number): void {
 // THREE.Clock is deprecated in r185 (its constructor warns to the console,
 // which alone would fail the zero-warnings bar); Timer is its replacement.
 const timer = new THREE.Timer();
+timer.connect(document); // hidden tabs report zero delta instead of a stale one
 
 // One clamped dt drives platform, drone, and turret alike, accumulated into
 // a shared sim time: after a background-tab stall everything resumes in
 // lockstep instead of the drone teleporting ahead of the turret's slew budget.
 let simTime = 0;
+let bhPhase = 0;
 
 renderer.setAnimationLoop(() => {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.05);
   simTime += dt;
 
+  // Refresh the pixel ratio if the window moved to a monitor with another DPR.
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  if (dpr !== renderer.getPixelRatio()) renderer.setPixelRatio(dpr);
+
   platform.rotation.y = wrapAngle(PLATFORM_SPIN * simTime);
-  bhUniforms.uTime.value = simTime;
+  bhPhase = THREE.MathUtils.euclideanModulo(bhPhase + BH_SPEED * dt, Math.PI * 2);
+  bhUniforms['uPhase'].value = bhPhase;
   updateDrone(simTime, dt);
   updateTurret(dt);
+
+  if (debugOn) {
+    const pos = bearingGeo.getAttribute('position') as THREE.BufferAttribute;
+    pos.setXYZ(0, headWorld.x, headWorld.y, headWorld.z);
+    pos.setXYZ(1, drone.position.x, drone.position.y, drone.position.z);
+    pos.needsUpdate = true;
+    const st = turretStats;
+    const floor = st.rawPitchDeg < 0 ? '  FLOOR' : '';
+    const sat = st.rateDeg >= 89.9 ? '  SATURATED' : '';
+    const satPct = st.frames > 0 ? Math.round((st.saturatedFrames / st.frames) * 100) : 0;
+    hud.textContent = [
+      `aim error   ${st.aimErrorDeg.toFixed(1).padStart(5)} deg  (max ${st.maxAimErrorDeg.toFixed(1)})`,
+      `joint rate  ${st.rateDeg.toFixed(1).padStart(5)} deg/s of 90 cap${sat}`,
+      `max rate    ${THREE.MathUtils.radToDeg(st.maxCombinedRate).toFixed(1).padStart(5)} deg/s`,
+      `pitch       ${st.pitchDeg.toFixed(1).padStart(5)} deg  (demand ${st.rawPitchDeg.toFixed(1)})${floor}`,
+      `saturated   ${satPct}% of frames`,
+    ].join('\n');
+  }
 
   // Status lamp: green locked, red at 45+ degrees of lag.
   const lag = THREE.MathUtils.clamp(turretStats.aimErrorDeg / 45, 0, 1);
   lampMat.emissive.copy(lampLocked).lerp(lampLagging, lag);
 
+  // Keep camera inertia identical across 60/144 Hz monitors.
+  controls.dampingFactor = 1 - Math.pow(0.95, dt * 60);
   controls.update();
   renderer.render(scene, camera);
 });
