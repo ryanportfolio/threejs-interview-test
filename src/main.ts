@@ -17,7 +17,7 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xaeffe4);
-scene.fog = new THREE.Fog(0xaeffe4, 15, 30);
+scene.fog = new THREE.Fog(0xaeffe4, 15, 61);
 
 const camera = new THREE.PerspectiveCamera(
   59,
