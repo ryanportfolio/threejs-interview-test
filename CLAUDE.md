@@ -45,6 +45,7 @@ Core tells, banned at write time:
 - WebGL needs a real GPU: use the session's Browser pane or the user's browser. Never headless Chromium; SwiftShader CPU rendering burns the machine and makes frame timing meaningless.
 - Sandbox can run npm installs, builds, type-checks, and dev servers; the user can reach a dev server the session starts (localhost).
 - Can't run the authoritative check -> flag the risk plainly, don't claim it passes.
+- Browser per session, never shared. The desktop app's Browser pane (`mcp__Claude_Browser__*`, `preview_start`) is one Chrome per app: a second session or subagent gets "Another task's Chrome owns browser slot". The official playwright plugin is one persistent profile: the second connection gets "Browser is already in use ... use --isolated" and deadlocks. Parallel or subagent browser work uses `mcp__playwright-iso__*` (`.mcp.json`, `@playwright/mcp --isolated`, in-memory profile).
 
 ## Standing project rules
 
